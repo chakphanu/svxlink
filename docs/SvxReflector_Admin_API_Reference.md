@@ -215,8 +215,19 @@ Authorization: Bearer your-token
       "is_blocked": false,
       "is_muted": false,
       "is_talker": true,
-      "rx": true,
-      "tx": false,
+      "rx": {
+        "A": {
+          "siglev": 85,
+          "sql_open": true,
+          "active": true,
+          "enabled": true
+        }
+      },
+      "tx": {
+        "A": {
+          "transmit": false
+        }
+      },
       "qth_name": "Stockholm"
     },
     {
@@ -230,8 +241,19 @@ Authorization: Bearer your-token
       "is_blocked": false,
       "is_muted": true,
       "is_talker": false,
-      "rx": false,
-      "tx": false,
+      "rx": {
+        "A": {
+          "siglev": 0,
+          "sql_open": false,
+          "active": false,
+          "enabled": true
+        }
+      },
+      "tx": {
+        "A": {
+          "transmit": false
+        }
+      },
       "qth_name": "Gothenburg"
     }
   ]
@@ -265,14 +287,74 @@ Authorization: Bearer your-token
 | proto_ver     | string   | Protocol version (e.g., "2.0")                 |
 | ip            | string   | Remote IP address                              |
 | port          | integer  | Remote TCP port                                |
-| is_blocked    | boolean  | True if node is blocked                        |
-| is_muted      | boolean  | True if node is in mute list                   |
-| is_talker     | boolean  | True if node is currently transmitting         |
-| rx            | boolean  | True if node has squelch open (receiving)      |
-| tx            | boolean  | True if node is transmitting                   |
+| is_blocked    | boolean  | True if node is temporarily blocked from TX    |
+|               |          | (SQL timeout protection, auto-expires)         |
+| is_muted      | boolean  | True if node is in admin mute list             |
+| is_talker     | boolean  | True if node is currently the active talker    |
+| rx            | object   | Receiver status (see RX Status below)          |
+| tx            | object   | Transmitter status (see TX Status below)       |
 | qth_name      | string   | QTH name/location (if available)               |
 +---------------+----------+------------------------------------------------+
 ```
+
+**RX Status Object:**
+
+The `rx` field contains receiver status for each receiver ID (A, B, C, etc.):
+
+```json
+{
+  "rx": {
+    "A": {
+      "siglev": 85,
+      "sql_open": true,
+      "active": true,
+      "enabled": true
+    }
+  }
+}
+```
+
+```
++-------------+----------+------------------------------------------------+
+| Field       | Type     | Description                                    |
++-------------+----------+------------------------------------------------+
+| siglev      | integer  | Signal level (typically 0-100, unit depends    |
+|             |          | on client configuration)                       |
+| sql_open    | boolean  | True if squelch is open (signal detected)      |
+| active      | boolean  | True if receiver is actively receiving         |
+| enabled     | boolean  | True if receiver is enabled                    |
++-------------+----------+------------------------------------------------+
+```
+
+**TX Status Object:**
+
+The `tx` field contains transmitter status for each transmitter ID:
+
+```json
+{
+  "tx": {
+    "A": {
+      "transmit": true
+    }
+  }
+}
+```
+
+```
++-------------+----------+------------------------------------------------+
+| Field       | Type     | Description                                    |
++-------------+----------+------------------------------------------------+
+| transmit    | boolean  | True if transmitter is currently transmitting  |
++-------------+----------+------------------------------------------------+
+```
+
+**Note on is_blocked vs is_muted:**
+
+- `is_blocked`: Temporary automatic block due to SQL timeout protection.
+  When a node holds squelch open too long, the server blocks it temporarily
+  to prevent "stuck mic" situations. This auto-expires after configured time.
+- `is_muted`: Administrative mute via Admin API. Node is explicitly muted
+  by an administrator and remains muted until manually unmuted.
 
 **Usage for Live Dashboard:**
 
@@ -283,15 +365,18 @@ monitoring dashboard:
 +------------------------------------------------------------------+
 |                    Dashboard Data Mapping                         |
 +------------------------------------------------------------------+
-| Dashboard Column  | API Field      | Notes                        |
+| Dashboard Column  | API Field          | Notes                    |
 +------------------------------------------------------------------+
-| Callsign          | callsign       | Node identifier              |
-| TG                | tg             | Current talk group           |
-| Monitored         | monitored_tgs  | Display as comma-separated   |
-| Signal            | is_talker/rx   | TX/RX indicator              |
-| Status            | is_muted       | Muted/Active status          |
-| Location          | qth_name       | QTH information              |
-| IP                | ip             | Remote address               |
+| Callsign          | callsign           | Node identifier          |
+| TG                | tg                 | Current talk group       |
+| Monitored         | monitored_tgs      | Display as comma-sep     |
+| Signal Level      | rx.{id}.siglev     | 0-100 signal strength    |
+| Squelch           | rx.{id}.sql_open   | Squelch open indicator   |
+| TX Status         | is_talker          | Active talker indicator  |
+| Mute Status       | is_muted           | Admin muted              |
+| Block Status      | is_blocked         | SQL timeout blocked      |
+| Location          | qth_name           | QTH information          |
+| IP                | ip                 | Remote address           |
 +------------------------------------------------------------------+
 ```
 
