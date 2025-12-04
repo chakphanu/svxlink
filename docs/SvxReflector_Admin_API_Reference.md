@@ -63,20 +63,20 @@ sequenceDiagram
     participant DataStore
     participant Reflector
 
-    Client->>AdminAPI: HTTP Request + Bearer Token
+    Client->>AdminAPI: HTTP Request with Bearer Token
     AdminAPI->>AdminAPI: Validate Token
     alt Token Invalid
         AdminAPI-->>Client: 401 Unauthorized
     else Token Valid
-        AdminAPI->>MuteList: Query/Modify
-        AdminAPI->>UserDB: Query/Modify
-        MuteList->>DataStore: Persist (SQLite)
-        UserDB->>DataStore: Persist (SQLite)
+        AdminAPI->>MuteList: Query or Modify
+        AdminAPI->>UserDB: Query or Modify
+        MuteList->>DataStore: Persist to SQLite
+        UserDB->>DataStore: Persist to SQLite
         alt User Disabled
             AdminAPI->>Reflector: Kick connected client
         end
         DataStore-->>AdminAPI: OK
-        AdminAPI-->>Client: 200 OK + JSON
+        AdminAPI-->>Client: 200 OK with JSON
     end
 ```
 
@@ -99,7 +99,7 @@ Authorization: Bearer <your-api-token>
 flowchart TD
     A[HTTP Request] --> B{Has Authorization Header?}
     B -->|No| C[401 Unauthorized]
-    B -->|Yes| D{Format: Bearer TOKEN?}
+    B -->|Yes| D{"Format: Bearer TOKEN?"}
     D -->|No| C
     D -->|Yes| E{Token matches config?}
     E -->|No| C
@@ -527,7 +527,7 @@ sequenceDiagram
 
     Admin->>Server: POST /admin/kick
     Server->>Client: TCP ERROR message
-    Note over Client: State = ERROR
+    Note over Client: State becomes ERROR
     Server-->>Admin: 200 OK
     Note over Server: Start 10s timer
     Server->>Server: Wait 10 seconds
@@ -816,17 +816,17 @@ sequenceDiagram
     participant Reflector as SvxReflector
     participant Client as Connected Node
 
-    Admin->>API: PUT /admin/users/SM0ABC {"enabled": false}
-    API->>DB: updateUser(callsign, {enabled: false})
+    Admin->>API: PUT /admin/users/SM0ABC with enabled false
+    API->>DB: updateUser with enabled false
     DB-->>API: OK
-    API->>Reflector: lookup(callsign)
-    Reflector-->>API: ReflectorClient*
-    API->>Reflector: client->kick("User account disabled")
+    API->>Reflector: lookup callsign
+    Reflector-->>API: ReflectorClient pointer
+    API->>Reflector: client kick User account disabled
     Reflector->>Client: TCP ERROR message
-    Note over Client: State = ERROR
-    API-->>Admin: 200 OK {"message": "User disabled and kicked"}
+    Note over Client: State becomes ERROR
+    API-->>Admin: 200 OK User disabled and kicked
     Note over Reflector: Start 10s timer
-    Reflector->>Client: Close socket (after 10s)
+    Reflector->>Client: Close socket after 10s
 ```
 
 ---
@@ -887,8 +887,8 @@ Represents a muted node entry.
 ```mermaid
 classDiagram
     class MuteEntry {
-        +string callsign
-        +string reason
+        +String callsign
+        +String reason
         +int64 muted_at
         +int64 expires_at
         +bool permanent
@@ -919,16 +919,16 @@ Represents a user account.
 ```mermaid
 classDiagram
     class UserEntry {
-        +string callsign
-        +string group
-        +string password
+        +String callsign
+        +String group
+        +String password
         +bool enabled
         +int64 created_at
         +int64 updated_at
         +int64 last_seen
         +int login_count
-        +object metadata
-        +string source
+        +Object metadata
+        +String source
     }
 ```
 
@@ -982,9 +982,9 @@ flowchart TD
     F -->|Yes| H{Required Fields?}
     H -->|No| G
     H -->|Yes| I{Resource Exists?}
-    I -->|No for GET/PUT/DELETE| J[404 Not Found]
-    I -->|Yes for POST create| K[409 Conflict]
-    I -->|OK| L[200/201 Success]
+    I -->|No GET PUT DELETE| J[404 Not Found]
+    I -->|Yes POST create| K[409 Conflict]
+    I -->|OK| L[200 or 201 Success]
 ```
 
 ---
@@ -1077,9 +1077,9 @@ graph TB
 ```mermaid
 classDiagram
     class AdminHandler {
-        -MuteList* m_mute_list
-        -UserDatabase* m_user_db
-        -string m_auth_token
+        -MuteList m_mute_list
+        -UserDatabase m_user_db
+        -String m_auth_token
         +handleRequest()
         -handleMute()
         -handleUnmute()
@@ -1090,9 +1090,9 @@ classDiagram
     }
 
     class MuteList {
-        -map entries
-        -IDataStore* store
-        -mutex m_mutex
+        -Map entries
+        -IDataStore store
+        -Mutex m_mutex
         +mute()
         +muteForever()
         +unmute()
@@ -1101,9 +1101,9 @@ classDiagram
     }
 
     class UserDatabase {
-        -map entries
-        -IDataStore* store
-        -mutex m_mutex
+        -Map entries
+        -IDataStore store
+        -Mutex m_mutex
         +addUser()
         +getUser()
         +updateUser()
@@ -1113,9 +1113,9 @@ classDiagram
     }
 
     class ReflectorClient {
-        +lookup(callsign) ReflectorClient*
+        +lookup(callsign) ReflectorClient
         +kick(reason)
-        +callsign() string
+        +callsign() String
     }
 
     class IDataStore {
@@ -1129,7 +1129,7 @@ classDiagram
     }
 
     class SqliteDataStore {
-        -sqlite3* m_db
+        -sqlite3 m_db
         +open()
         +close()
         +get()
@@ -1173,11 +1173,11 @@ sequenceDiagram
     C->>A: POST /admin/mute
     A->>A: Validate Token
     A->>A: Parse JSON
-    A->>M: mute(callsign, duration, reason)
+    A->>M: mute callsign duration reason
     M->>M: Lock mutex
     M->>M: Check if already muted
     M->>M: Create Entry
-    M->>D: set("mutes", callsign, json)
+    M->>D: set mutes callsign json
     D->>S: INSERT OR REPLACE
     S-->>D: OK
     D-->>M: OK
@@ -1196,18 +1196,18 @@ sequenceDiagram
     participant R as ReflectorClient
     participant N as Connected Node
 
-    C->>A: PUT /admin/users/SM0ABC {"enabled": false}
+    C->>A: PUT /admin/users/SM0ABC enabled false
     A->>A: Validate Token
-    A->>U: exists(callsign)
+    A->>U: exists callsign
     U-->>A: true
     A->>A: Parse JSON
-    A->>U: updateUser(callsign, updates)
+    A->>U: updateUser callsign updates
     U-->>A: true
-    A->>R: lookup(callsign)
+    A->>R: lookup callsign
     R-->>A: client pointer
-    A->>R: client->kick("User account disabled")
+    A->>R: client kick User account disabled
     R->>N: Send ERROR message
-    A-->>C: 200 OK {"message": "User disabled and kicked"}
+    A-->>C: 200 OK User disabled and kicked
 ```
 
 ---
