@@ -114,7 +114,7 @@ using namespace Async;
 
 HttpServerConnection::HttpServerConnection(size_t recv_buf_len)
   : TcpConnection(recv_buf_len), m_state(STATE_DISCONNECTED),
-    m_chunked(false)
+    m_chunked(false), m_content_length(0), m_content_received(0)
 {
 #if 0
   TcpConnection::sendBufferFull.connect(
@@ -127,7 +127,8 @@ HttpServerConnection::HttpServerConnection(
     int sock, const IpAddress& remote_addr, uint16_t remote_port,
     size_t recv_buf_len)
   : TcpConnection(sock, remote_addr, remote_port, recv_buf_len),
-    m_state(STATE_EXPECT_START_LINE), m_chunked(false)
+    m_state(STATE_EXPECT_START_LINE), m_chunked(false),
+    m_content_length(0), m_content_received(0)
 {
 #if 0
   TcpConnection::sendBufferFull.connect(
@@ -159,6 +160,12 @@ TcpConnection& HttpServerConnection::operator=(TcpConnection&& other_base)
 
   m_chunked = other.m_chunked;
   other.m_chunked = false;
+
+  m_content_length = other.m_content_length;
+  other.m_content_length = 0;
+
+  m_content_received = other.m_content_received;
+  other.m_content_received = 0;
 
   return *this;
 } /* HttpServerConnection::operator=(TcpConnection&&) */
@@ -317,10 +324,26 @@ int HttpServerConnection::onDataReceived(void *buf, int count)
         m_row.clear();
       }
     }
+    else if (m_state == STATE_EXPECT_PAYLOAD)
+    {
+      // Read request body data
+      size_t bytes_needed = m_content_length - m_content_received;
+      size_t bytes_available = data.size() - data_pos;
+      size_t bytes_to_read = (bytes_available < bytes_needed) ?
+                             bytes_available : bytes_needed;
+
+      m_req.content.append(data.substr(data_pos, bytes_to_read));
+      m_content_received += bytes_to_read;
+      data_pos += bytes_to_read;
+
+      if (m_content_received >= m_content_length)
+      {
+        m_state = STATE_REQ_COMPLETE;
+      }
+    }
     else
     {
       data_pos = std::string::npos;
-      //m_req.content.append(data);
     }
   }
 
@@ -328,6 +351,8 @@ int HttpServerConnection::onDataReceived(void *buf, int count)
   {
     requestReceived(this, m_req);
     m_req.clear();
+    m_content_length = 0;
+    m_content_received = 0;
     m_state = STATE_EXPECT_START_LINE;
   }
 
@@ -388,6 +413,28 @@ void HttpServerConnection::handleHeader(void)
 
   if (m_row.empty())
   {
+    // Check if we need to read a request body
+    Headers::const_iterator it = m_req.headers.find("Content-Length");
+    if (it != m_req.headers.end())
+    {
+      std::istringstream is(it->second);
+      is >> m_content_length;
+      if (is.fail() || !is.eof())
+      {
+        std::cerr << "*** ERROR: Invalid Content-Length value: "
+                  << it->second << std::endl;
+        disconnect();
+        return;
+      }
+      if (m_content_length > 0)
+      {
+        m_content_received = 0;
+        m_req.content.clear();
+        m_req.content.reserve(m_content_length);
+        m_state = STATE_EXPECT_PAYLOAD;
+        return;
+      }
+    }
     m_state = STATE_REQ_COMPLETE;
     return;
   }
@@ -453,6 +500,8 @@ void HttpServerConnection::disconnectCleanup(void)
   m_state = STATE_DISCONNECTED;
   m_row.clear();
   m_req.clear();
+  m_content_length = 0;
+  m_content_received = 0;
 } /* HttpServerConnection::disconnectCleanup */
 
 

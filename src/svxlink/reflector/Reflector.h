@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <sys/time.h>
 #include <vector>
 #include <string>
+#include <memory>
 #include <json/json.h>
 
 
@@ -80,6 +81,7 @@ namespace Async
 
 class ReflectorMsg;
 class ReflectorUdpMsg;
+class AdminHandler;
 
 
 /****************************************************************************
@@ -213,6 +215,8 @@ class Reflector : public sigc::trackable
 
     Json::Value& clientStatus(const std::string& callsign);
 
+    AdminHandler* adminHandler() { return m_admin_handler.get(); }
+
   protected:
 
   private:
@@ -256,6 +260,7 @@ class Reflector : public sigc::trackable
     std::vector<uint8_t>        m_ca_sig;
     std::string                 m_accept_cert_email;
     Json::Value                 m_status;
+    std::unique_ptr<AdminHandler> m_admin_handler;
 
     Reflector(const Reflector&);
     Reflector& operator=(const Reflector&);

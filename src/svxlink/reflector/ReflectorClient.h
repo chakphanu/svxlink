@@ -498,6 +498,16 @@ class ReflectorClient : public sigc::trackable
 
     void certificateUpdated(Async::SslX509& cert);
 
+    /**
+     * @brief   Kick the client with an optional reason
+     * @param   reason The reason for kicking the client (default: "Kicked by admin")
+     *
+     * This function kicks a client by sending an error message with the
+     * specified reason. The error handler will trigger the disconnect timer
+     * to gracefully disconnect the client.
+     */
+    void kick(const std::string& reason = "Kicked by admin");
+
   private:
     using ClientIdRandomDist  = std::uniform_int_distribution<ClientId>;
     using ClientMap           = std::map<ClientId, ReflectorClient*>;

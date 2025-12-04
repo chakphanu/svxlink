@@ -19,12 +19,20 @@ pkg_check_modules (JSONCPP REQUIRED jsoncpp)
 include_directories(${JSONCPP_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${JSONCPP_LIBRARIES})
 
+# Find SQLite3 library
+find_library(SQLITE3_LIBRARY sqlite3)
+if(NOT SQLITE3_LIBRARY)
+  message(FATAL_ERROR "SQLite3 library not found")
+endif()
+set(LIBS ${LIBS} ${SQLITE3_LIBRARY})
+
 # Add project libraries
 set(LIBS asynccpp asyncaudio asynccore svxmisc ${LIBS})
 
 # Build the executable
 add_executable(svxreflector
   svxreflector.cpp Reflector.cpp ReflectorClient.cpp TGHandler.cpp
+  MuteList.cpp AdminHandler.cpp SqliteDataStore.cpp UserDatabase.cpp
 )
 target_link_libraries(svxreflector ${LIBS})
 set_target_properties(svxreflector PROPERTIES

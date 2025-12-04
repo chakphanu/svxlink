@@ -1,0 +1,22 @@
+# Build artifacts
+src/build/
+build/
+
+# Git
+.git/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large documentation files
+*.pdf
+
+# Local files
+CLAUDE.md
+ESP32-REMOTETRX.md
+SvxLink_Thai_Architecture_Guide.md
+svxreflector-thai.md
+RemoteTrx_Protocol_Complete_Technical_Specification.md

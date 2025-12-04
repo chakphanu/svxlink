@@ -65,6 +65,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Reflector.h"
 #include "ReflectorClient.h"
 #include "TGHandler.h"
+#include "AdminHandler.h"
 
 
 /****************************************************************************
@@ -346,6 +347,8 @@ bool Reflector::initialize(Async::Config &cfg)
         sigc::mem_fun(*this, &Reflector::httpClientConnected));
     m_http_server->clientDisconnected.connect(
         sigc::mem_fun(*this, &Reflector::httpClientDisconnected));
+
+    m_admin_handler.reset(new AdminHandler(*this, *m_cfg));
   }
 
     // Path for command PTY
@@ -1152,6 +1155,13 @@ void Reflector::udpDatagramReceived(const IpAddress& addr, uint16_t port,
     {
       if (!client->isBlocked())
       {
+        // Check if client is muted (cannot send audio to reflector)
+        if (m_admin_handler && m_admin_handler->muteList() &&
+            m_admin_handler->muteList()->isMuted(client->callsign()))
+        {
+          break;
+        }
+
         MsgUdpAudio msg;
         if (!msg.unpack(ss))
         {
@@ -1330,6 +1340,11 @@ void Reflector::httpRequestReceived(Async::HttpServerConnection *con,
                                     Async::HttpServerConnection::Request& req)
 {
   //std::cout << "### " << req.method << " " << req.target << std::endl;
+
+  if (m_admin_handler && m_admin_handler->handleRequest(con, req))
+  {
+    return;
+  }
 
   Async::HttpServerConnection::Response res;
   if ((req.method != "GET") && (req.method != "HEAD"))

@@ -63,6 +63,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "ReflectorClient.h"
 #include "Reflector.h"
 #include "TGHandler.h"
+#include "AdminHandler.h"
+#include "UserDatabase.h"
 
 
 /****************************************************************************
@@ -374,6 +376,13 @@ void ReflectorClient::certificateUpdated(Async::SslX509& cert)
     sendClientCert(cert);
   }
 } /* ReflectorClient::certificateUpdated */
+
+
+void ReflectorClient::kick(const std::string& reason)
+{
+  std::cout << m_callsign << ": Kicking client - " << reason << std::endl;
+  sendError(reason);
+} /* ReflectorClient::kick */
 
 
 
@@ -1288,6 +1297,30 @@ void ReflectorClient::handleHeartbeat(Async::Timer *t)
 
 std::string ReflectorClient::lookupUserKey(const std::string& callsign)
 {
+  // First, try to look up in the user database (via AdminHandler)
+  AdminHandler* admin = m_reflector->adminHandler();
+  if (admin != nullptr)
+  {
+    UserDatabase* user_db = admin->userDatabase();
+    if (user_db != nullptr)
+    {
+      // lookupUserKey checks both existence and enabled status
+      std::string password = user_db->lookupUserKey(callsign);
+      if (!password.empty())
+      {
+        return password;
+      }
+      // If user exists in database, it was either disabled or invalid
+      if (user_db->exists(callsign))
+      {
+        cout << "*** WARNING: User \"" << callsign
+             << "\" exists but access denied (disabled or invalid)" << endl;
+        return "";  // Deny access - don't fall through to config file
+      }
+    }
+  }
+
+  // Fallback to config file [USERS]/[PASSWORDS] sections
   string auth_group;
   if (!m_cfg->getValue("USERS", callsign, auth_group) || auth_group.empty())
   {
@@ -1323,6 +1356,21 @@ void ReflectorClient::connectionAuthenticated(const std::string& callsign)
          << "." << m_client_proto_ver.minorVer()
          << endl;
     m_con_state = STATE_CONNECTED;
+
+    // Record login in user database
+    AdminHandler* admin = m_reflector->adminHandler();
+    if (admin != nullptr)
+    {
+      UserDatabase* user_db = admin->userDatabase();
+      if (user_db != nullptr)
+      {
+        std::ostringstream proto_ver_str;
+        proto_ver_str << m_client_proto_ver.majorVer() << "."
+                      << m_client_proto_ver.minorVer();
+        user_db->recordLogin(callsign, m_con->remoteHost().toString(),
+                             proto_ver_str.str());
+      }
+    }
 
     assert(client_callsign_map.find(m_callsign) == client_callsign_map.end());
     client_callsign_map[m_callsign] = this;
