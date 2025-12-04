@@ -1,6 +1,6 @@
 # SvxReflector Admin API Reference
 
-**Version:** 1.0
+**Version:** 1.1
 **Last Updated:** 2025-12-05
 **Base URL:** `http://<host>:<port>/admin`
 
@@ -186,7 +186,8 @@ HTTP_SRV_PORT=8080
 
 #### GET /admin/status
 
-Returns current reflector status including connected nodes and statistics.
+Returns current reflector status including detailed information about connected nodes.
+This endpoint is designed for building live dashboards and monitoring systems.
 
 **Request:**
 ```http
@@ -199,13 +200,40 @@ Authorization: Bearer your-token
 ```json
 {
   "uptime": 0,
-  "connected_nodes": 3,
+  "connected_nodes": 2,
   "muted_nodes": 1,
-  "admin_api_version": "1.0",
+  "admin_api_version": "1.1",
   "nodes": [
-    "SM0SVX",
-    "SM0ABC-R",
-    "SM0XYZ-L"
+    {
+      "callsign": "SM0SVX",
+      "id": 50079,
+      "tg": 1,
+      "monitored_tgs": [1, 2, 3],
+      "proto_ver": "2.0",
+      "ip": "192.168.1.100",
+      "port": 56618,
+      "is_blocked": false,
+      "is_muted": false,
+      "is_talker": true,
+      "rx": true,
+      "tx": false,
+      "qth_name": "Stockholm"
+    },
+    {
+      "callsign": "SM0ABC-R",
+      "id": 50080,
+      "tg": 1,
+      "monitored_tgs": [],
+      "proto_ver": "2.0",
+      "ip": "10.0.0.50",
+      "port": 45123,
+      "is_blocked": false,
+      "is_muted": true,
+      "is_talker": false,
+      "rx": false,
+      "tx": false,
+      "qth_name": "Gothenburg"
+    }
   ]
 }
 ```
@@ -219,9 +247,52 @@ Authorization: Bearer your-token
 | uptime            | integer  | Server uptime in seconds (TODO: always 0)|
 | connected_nodes   | integer  | Number of currently connected nodes      |
 | muted_nodes       | integer  | Number of entries in mute list           |
-| admin_api_version | string   | API version string                       |
-| nodes             | string[] | Array of connected node callsigns        |
+| admin_api_version | string   | API version string ("1.1")               |
+| nodes             | array    | Array of node detail objects             |
 +-------------------+----------+------------------------------------------+
+```
+
+**Node Detail Fields:**
+
+```
++---------------+----------+------------------------------------------------+
+| Field         | Type     | Description                                    |
++---------------+----------+------------------------------------------------+
+| callsign      | string   | Node callsign                                  |
+| id            | integer  | Unique client ID assigned by server            |
+| tg            | integer  | Current talk group (0 if not selected)         |
+| monitored_tgs | int[]    | Array of monitored talk group IDs              |
+| proto_ver     | string   | Protocol version (e.g., "2.0")                 |
+| ip            | string   | Remote IP address                              |
+| port          | integer  | Remote TCP port                                |
+| is_blocked    | boolean  | True if node is blocked                        |
+| is_muted      | boolean  | True if node is in mute list                   |
+| is_talker     | boolean  | True if node is currently transmitting         |
+| rx            | boolean  | True if node has squelch open (receiving)      |
+| tx            | boolean  | True if node is transmitting                   |
+| qth_name      | string   | QTH name/location (if available)               |
++---------------+----------+------------------------------------------------+
+```
+
+**Usage for Live Dashboard:**
+
+The `/admin/status` endpoint provides all information needed for a real-time
+monitoring dashboard:
+
+```
++------------------------------------------------------------------+
+|                    Dashboard Data Mapping                         |
++------------------------------------------------------------------+
+| Dashboard Column  | API Field      | Notes                        |
++------------------------------------------------------------------+
+| Callsign          | callsign       | Node identifier              |
+| TG                | tg             | Current talk group           |
+| Monitored         | monitored_tgs  | Display as comma-separated   |
+| Signal            | is_talker/rx   | TX/RX indicator              |
+| Status            | is_muted       | Muted/Active status          |
+| Location          | qth_name       | QTH information              |
+| IP                | ip             | Remote address               |
++------------------------------------------------------------------+
 ```
 
 ---
@@ -1152,17 +1223,22 @@ sequenceDiagram
 API_URL="http://localhost:8080"
 TOKEN="your-api-token"
 
-# 1. Check current status
+# 1. Check current status (API v1.1 returns detailed node info)
 echo "=== Current Status ==="
 curl -s -X GET "$API_URL/admin/status" \
   -H "Authorization: Bearer $TOKEN" | jq .
 
-# 2. Check if node is connected
-echo -e "\n=== Connected Nodes ==="
+# 2. Check connected nodes with details
+echo -e "\n=== Connected Nodes (detailed) ==="
 curl -s -X GET "$API_URL/admin/status" \
-  -H "Authorization: Bearer $TOKEN" | jq '.nodes'
+  -H "Authorization: Bearer $TOKEN" | jq '.nodes[] | {callsign, tg, is_muted, is_talker, ip}'
 
-# 3. Mute the problematic node for 1 hour
+# 3. List only callsigns
+echo -e "\n=== Node Callsigns ==="
+curl -s -X GET "$API_URL/admin/status" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.nodes[].callsign'
+
+# 4. Mute the problematic node for 1 hour
 echo -e "\n=== Muting Node ==="
 curl -s -X POST "$API_URL/admin/mute" \
   -H "Authorization: Bearer $TOKEN" \
@@ -1173,12 +1249,12 @@ curl -s -X POST "$API_URL/admin/mute" \
     "reason": "Audio interference reported"
   }' | jq .
 
-# 4. Verify mute list
+# 5. Verify mute list
 echo -e "\n=== Mute List ==="
 curl -s -X GET "$API_URL/admin/mute" \
   -H "Authorization: Bearer $TOKEN" | jq .
 
-# 5. If needed, kick the node
+# 6. If needed, kick the node
 echo -e "\n=== Kicking Node ==="
 curl -s -X POST "$API_URL/admin/kick" \
   -H "Authorization: Bearer $TOKEN" \
@@ -1188,7 +1264,7 @@ curl -s -X POST "$API_URL/admin/kick" \
     "reason": "Please check your audio settings"
   }' | jq .
 
-# 6. Later, unmute the node
+# 7. Later, unmute the node
 echo -e "\n=== Unmuting Node ==="
 curl -s -X POST "$API_URL/admin/unmute" \
   -H "Authorization: Bearer $TOKEN" \
@@ -1371,14 +1447,24 @@ class SvxReflectorAdmin:
 if __name__ == '__main__':
     client = SvxReflectorAdmin('http://localhost:8080', 'your-token')
 
-    # Get status
+    # Get detailed status (API v1.1)
     status = client.get_status()
+    print(f"API Version: {status['admin_api_version']}")
     print(f"Connected nodes: {status['connected_nodes']}")
-    print(f"Nodes: {status['nodes']}")
+    print(f"Muted nodes: {status['muted_nodes']}")
+
+    # Display detailed node information for dashboard
+    print("\n--- Connected Nodes ---")
+    print(f"{'Callsign':<12} {'TG':<6} {'Monitored':<15} {'Status':<10} {'IP':<15}")
+    print("-" * 60)
+    for node in status['nodes']:
+        monitored = ','.join(str(tg) for tg in node['monitored_tgs'])
+        status_str = 'MUTED' if node['is_muted'] else 'TX' if node['is_talker'] else 'RX' if node.get('rx') else 'IDLE'
+        print(f"{node['callsign']:<12} {node['tg']:<6} {monitored:<15} {status_str:<10} {node['ip']:<15}")
 
     # Mute a node for 1 hour
     result = client.mute('SM0ABC', duration=3600, reason='Testing')
-    print(f"Mute result: {result}")
+    print(f"\nMute result: {result}")
 
     # Create a user
     user = client.create_user(
@@ -1530,9 +1616,16 @@ python3 client_test.py --reflector-host localhost --reflector-port 5300 \
 +----------+------------+--------------------------------------------------+
 | Version  | Date       | Changes                                          |
 +----------+------------+--------------------------------------------------+
+| 1.1      | 2025-12    | Enhanced status endpoint                         |
+|          |            | - Detailed node info in /admin/status            |
+|          |            | - Added: id, tg, monitored_tgs, proto_ver        |
+|          |            | - Added: ip, port, is_blocked, is_muted          |
+|          |            | - Added: is_talker, rx, tx, qth_name             |
+|          |            | - Designed for live dashboard integration        |
++----------+------------+--------------------------------------------------+
 | 1.0      | 2025-12    | Initial release                                  |
 |          |            | - Mute/unmute/kick endpoints                     |
-|          |            | - Status endpoint                                |
+|          |            | - Status endpoint (callsign list only)           |
 |          |            | - User CRUD endpoints                            |
 |          |            | - SQLite persistence                             |
 |          |            | - Auto-kick on user disable                      |

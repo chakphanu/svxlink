@@ -834,6 +834,119 @@ Json::Value& Reflector::clientStatus(const std::string& callsign)
 } /* Reflector::clientStatus */
 
 
+void Reflector::clientDetails(std::vector<Json::Value>& clients) const
+{
+  clients.clear();
+  for (const auto& item : m_client_con_map)
+  {
+    ReflectorClient* client = item.second;
+    if (client->conState() != ReflectorClient::STATE_CONNECTED)
+    {
+      continue;
+    }
+
+    const std::string& callsign = client->callsign();
+    if (callsign.empty())
+    {
+      continue;
+    }
+
+    Json::Value info;
+    info["callsign"] = callsign;
+    info["id"] = client->clientId();
+    info["tg"] = client->currentTG();
+
+    // Monitored TGs as array
+    Json::Value monitored(Json::arrayValue);
+    for (uint32_t tg : client->monitoredTGs())
+    {
+      monitored.append(tg);
+    }
+    info["monitored_tgs"] = monitored;
+
+    // Protocol version
+    std::ostringstream proto_ver_ss;
+    proto_ver_ss << client->protoVer().majorVer() << "."
+                 << client->protoVer().minorVer();
+    info["proto_ver"] = proto_ver_ss.str();
+
+    // Remote IP and port from connection
+    Async::FramedTcpConnection* con = item.first;
+    info["ip"] = con->remoteHost().toString();
+    info["port"] = con->remotePort();
+
+    // Is blocked
+    info["is_blocked"] = client->isBlocked();
+
+    // Get additional status from m_status if available
+    if (m_status.isMember("nodes") && m_status["nodes"].isMember(callsign))
+    {
+      const Json::Value& node_status = m_status["nodes"][callsign];
+
+      // isTalker
+      if (node_status.isMember("isTalker"))
+      {
+        info["is_talker"] = node_status["isTalker"].asBool();
+      }
+
+      // Get RX info (signal levels, squelch, active)
+      if (node_status.isMember("qth") && node_status["qth"].isArray())
+      {
+        const Json::Value& qths = node_status["qth"];
+        for (Json::Value::ArrayIndex i = 0; i < qths.size(); ++i)
+        {
+          const Json::Value& qth = qths[i];
+
+          // RX status
+          if (qth.isMember("rx") && qth["rx"].isObject())
+          {
+            Json::Value rx_info(Json::objectValue);
+            const Json::Value& rx = qth["rx"];
+            for (const auto& rx_id : rx.getMemberNames())
+            {
+              if (rx[rx_id].isObject())
+              {
+                rx_info[rx_id] = rx[rx_id];
+              }
+            }
+            if (!rx_info.empty())
+            {
+              info["rx"] = rx_info;
+            }
+          }
+
+          // TX status
+          if (qth.isMember("tx") && qth["tx"].isObject())
+          {
+            Json::Value tx_info(Json::objectValue);
+            const Json::Value& tx = qth["tx"];
+            for (const auto& tx_id : tx.getMemberNames())
+            {
+              if (tx[tx_id].isObject())
+              {
+                tx_info[tx_id] = tx[tx_id];
+              }
+            }
+            if (!tx_info.empty())
+            {
+              info["tx"] = tx_info;
+            }
+          }
+
+          // QTH name/location
+          if (qth.isMember("name"))
+          {
+            info["qth_name"] = qth["name"];
+          }
+        }
+      }
+    }
+
+    clients.push_back(info);
+  }
+} /* Reflector::clientDetails */
+
+
 /****************************************************************************
  *
  * Protected member functions

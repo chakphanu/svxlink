@@ -578,18 +578,59 @@ void AdminHandler::handleStatus(
     Async::HttpServerConnection* con,
     const Async::HttpServerConnection::Request& req)
 {
-  std::vector<std::string> nodes;
-  m_reflector.nodeList(nodes);
+  // Get detailed client information
+  std::vector<Json::Value> clients;
+  m_reflector.clientDetails(clients);
 
   Json::Value response;
   response["uptime"] = 0; // TODO: Implement uptime tracking
-  response["connected_nodes"] = static_cast<unsigned>(nodes.size());
+  response["connected_nodes"] = static_cast<unsigned>(clients.size());
   response["muted_nodes"] = static_cast<unsigned>(m_mute_list->size());
-  response["admin_api_version"] = "1.0";
+  response["admin_api_version"] = "1.1";
 
+  // Build detailed nodes array with all client info
   Json::Value node_list(Json::arrayValue);
-  for (const auto& node : nodes)
+  for (const auto& client : clients)
   {
+    Json::Value node;
+    node["callsign"] = client["callsign"];
+    node["id"] = client["id"];
+    node["tg"] = client["tg"];
+    node["monitored_tgs"] = client["monitored_tgs"];
+    node["proto_ver"] = client["proto_ver"];
+    node["ip"] = client["ip"];
+    node["port"] = client["port"];
+    node["is_blocked"] = client["is_blocked"];
+
+    // Check if muted
+    std::string callsign = client["callsign"].asString();
+    node["is_muted"] = m_mute_list->isMuted(callsign);
+
+    // Optional fields from status
+    if (client.isMember("is_talker"))
+    {
+      node["is_talker"] = client["is_talker"];
+    }
+    else
+    {
+      node["is_talker"] = false;
+    }
+
+    if (client.isMember("rx"))
+    {
+      node["rx"] = client["rx"];
+    }
+
+    if (client.isMember("tx"))
+    {
+      node["tx"] = client["tx"];
+    }
+
+    if (client.isMember("qth_name"))
+    {
+      node["qth_name"] = client["qth_name"];
+    }
+
     node_list.append(node);
   }
   response["nodes"] = node_list;

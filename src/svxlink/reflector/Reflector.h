@@ -215,6 +215,25 @@ class Reflector : public sigc::trackable
 
     Json::Value& clientStatus(const std::string& callsign);
 
+    /**
+     * @brief   Get the status JSON for all connected nodes
+     * @return  Returns a const reference to the status JSON object
+     *
+     * The returned JSON object contains detailed information about each
+     * connected node including callsign, TG, monitored TGs, signal levels,
+     * transmit/receive status, and more.
+     */
+    const Json::Value& nodesStatus(void) const { return m_status; }
+
+    /**
+     * @brief   Get detailed information about all connected clients
+     * @param   clients Vector to store client info (callsign, ip, tg, etc.)
+     *
+     * This function returns detailed information about each connected client
+     * for use in the Admin API status endpoint.
+     */
+    void clientDetails(std::vector<Json::Value>& clients) const;
+
     AdminHandler* adminHandler() { return m_admin_handler.get(); }
 
   protected:
